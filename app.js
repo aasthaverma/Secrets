@@ -17,7 +17,7 @@ const app = express();
 app.use(express.static("public"));
 app.use(bodyParser.urlencoded({extended:true}));
 
-app.set('view engine','ejs');
+app.set("view engine","ejs");
 
 app.use(session({
   secret: process.env.SECRET,
@@ -29,7 +29,7 @@ app.use(passport.initialize());
 app.use(passport.session());
 
 mongoose.connect("mongodb://localhost:27017/userDB",{useNewUrlParser:true,useUnifiedTopology: true});
-mongoose.set('useCreateIndex', true);
+mongoose.set("useCreateIndex", true);
 
 const db = mongoose.connection;
 db.once("open",function(){
@@ -42,7 +42,8 @@ const userSchema = new Schema({
   email: String,
   password : String,
   googleId : String,
-  facebookId : String
+  facebookId : String,
+  secret : String
 });
 
 userSchema.plugin(passportLocalMongoose);
@@ -108,29 +109,42 @@ app.get("/auth/google/secrets",
     res.redirect("/secrets");
   });
 
-app.get('/auth/facebook',
+app.get("/auth/facebook",
   passport.authenticate('facebook'));
 
-app.get('/auth/facebook/secrets',
-  passport.authenticate('facebook', { failureRedirect: '/login' }),
+app.get("/auth/facebook/secrets",
+  passport.authenticate('facebook', { failureRedirect: "/login" }),
     function(req, res) {
       res.redirect("/secrets");
   });
 
 
 app.get("/secrets",function (req,res){
+  User.find({secret :{ $ne: null }},function(err,foundUser){
+    if(err){
+      res.send(err);
+    }
+    else{
+      if(foundUser){
+        res.render("secrets",{userWithSecret : foundUser});
+      }
+    }
+  })
+});
+
+app.get("/submit",function (req,res){
   if(req.isAuthenticated())
   {
-    res.render("secrets");
+    res.render("submit");
   }
   else {
-    res.redirect('/login');
+    res.redirect("/login");
   }
 });
 
-app.get('/logout', function(req, res){
+app.get("/logout", function(req, res){
   req.logout();
-  res.redirect('/');
+  res.redirect("/");
 });
 
 app.post("/register",function (req,res){
@@ -158,10 +172,31 @@ app.post("/login",function(req,res){
       res.redirect("/login");
     }else {
       passport.authenticate("local")(req,res,function(){
-        res.redirect('/secrets');
+        res.redirect("/secrets");
       });
     }
 });
+});
+
+app.post("/submit",function (req,res){
+  User.findById(req.user._id,function(err,foundUser){
+    if(err)
+    {
+      res.send(err);
+    }
+    else{
+      if(foundUser){
+        foundUser.secret = req.body.secret;
+        foundUser.save(function(err){
+          if(err){
+            res.send(err);
+          }else{
+            res.redirect("/secrets");
+          }
+        });
+      }
+    }
+  })
 });
 
 app.listen("3000",function(){
